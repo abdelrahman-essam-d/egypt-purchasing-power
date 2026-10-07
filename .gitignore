@@ -1,0 +1,16 @@
+# Python Enviroment
+.venv/
+__pycache__/
+*.pyc
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+# Secrets
+.env
+# Notebook
+.ipynb_checkpoints/
+# We dont need data at git
+data/raw/*
+!data/raw/.gitkeep
+# System
+.DS_Store
