@@ -1,24 +1,26 @@
 
+import pandas as pd
 
 
 
-def real_value(amount, cpi_from, cpi_to):
-
-    if cpi_from <= 0 or cpi_to <= 0:
-        raise ValueError("CPI values must be positive numbers.")
-
-    return amount * (cpi_to / cpi_from)
+def standardize_month_col (df, col_name="month"):
+    df1 = df.copy()
+    df1[col_name] = pd.to_datetime(df1[col_name]).dt.to_period("M") 
+    return df1
 
 
-def to_usd(amount, egp_per_usd):
-    if egp_per_usd <= 0:
-        raise ValueError("Exchange rate must be a positive number.")
+def to_monthly_last_observation (df, date_col):
+    df1 = df.copy()
 
-    return amount / egp_per_usd
+    df1[date_col] = pd.to_datetime(df1[date_col])
+    df1 = df1.sort_values(by=date_col)
 
+    df1["month"] = df1[date_col].dt.to_period("M")     # extract months from dates
+    df1 = df1.groupby("month").tail(1)               # make the data monthly
 
+    df1 = df1.reset_index(drop=True)
 
-
+    return df1
 
 
 
