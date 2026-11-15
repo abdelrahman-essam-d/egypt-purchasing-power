@@ -14,3 +14,4 @@ data/raw/*
 !data/raw/.gitkeep
 # System
 .DS_Store
+data/processed/*.csv
