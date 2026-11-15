@@ -10,6 +10,8 @@ Give it a salary and a month, and it tells you what that salary is worth today i
 2. After each currency float, how many months did the minimum wage take to get back to its pre-float level, in real EGP and in USD?
 3. Does any forecasting model beat a naive baseline when predicting the USD/EGP exchange rate?
 
+4. If someone had invested their money in Egyptian pounds, US dollars, or gold in 2022, which option would have preserved its purchasing power better?
+
 Real = adjusted for inflation.
 
 ## Done when
