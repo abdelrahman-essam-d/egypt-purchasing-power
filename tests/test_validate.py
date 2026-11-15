@@ -65,3 +65,32 @@ def test_positive_values_invalid():
 
     with pytest.raises(ValueError, match="non-positive values"):
         check_positive_values(df, "rate")
+
+
+
+def test_validate_empty_dataframe():
+    """التحقق من رفض الـ DataFrame الفارغ برساْل واضح."""
+    df_empty = pd.DataFrame()
+    with pytest.raises(ValueError, match="DataFrame is empty"):
+        check_missing_or_duplicate_months(df_empty)
+    with pytest.raises(ValueError, match="DataFrame is empty"):
+        validate_dataset(df_empty)
+
+
+def test_validate_missing_columns():
+    df = pd.DataFrame({"wrong_month": ["2023-01", "2023-02"], "val": [100.0, 105.0]})
+    
+    with pytest.raises(KeyError, match="Month column 'month' not found"):
+        check_missing_or_duplicate_months(df, month_col="month")
+    
+    with pytest.raises(KeyError, match="Value column 'missing_col' not found"):
+        validate_dataset(df, month_col="wrong_month", value_cols=["missing_col"])
+
+
+def test_validate_unsorted_months():
+    df_unsorted = pd.DataFrame({
+        "month": ["2023-03", "2023-01", "2023-02"],
+        "val": [100.0, 105.0, 110.0]
+    })
+    with pytest.raises(ValueError, match="not sorted in chronological"):
+        check_missing_or_duplicate_months(df_unsorted)
