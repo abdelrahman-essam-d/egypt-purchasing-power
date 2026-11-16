@@ -1,11 +1,13 @@
+
 import pandas as pd
 import pytest
-from purchasing_power.config import END, START
 
+from purchasing_power.config import END, START
 from purchasing_power.validate import (
     check_missing_or_duplicate_months,
     check_positive_values,
     validate_dataset,
+    validate_reference_tables,
 )
 
 
@@ -94,3 +96,103 @@ def test_validate_unsorted_months():
     })
     with pytest.raises(ValueError, match="not sorted in chronological"):
         check_missing_or_duplicate_months(df_unsorted)
+
+
+
+
+VALID_EVENTS_CSV = (
+    "event_id,event_date,month,type,description,fx_before_egp_per_usd,fx_after_egp_per_usd,"
+    "policy_rate_change_bp,source_1,source_2,confidence,note\n"
+    "E01,2020-01-01,2020-01,rate,test,30,30,100,src1,,high,test\n"
+)
+
+
+def test_validate_reference_tables_success(tmp_path):
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = "sector,effective_date,amount_egp,confidence\ngov,2020-01-01,2000,high\ngov,2022-01-01,2400,medium\n"
+    mw_file.write_text(mw_data, encoding="utf-8")
+    events_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    assert validate_reference_tables(min_wage_path=mw_file, events_path=events_file) is True
+
+
+def test_validate_reference_tables_file_not_found(tmp_path):
+    non_existent = tmp_path / "non_existent.csv"
+    valid_file = tmp_path / "events.csv"
+    valid_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    with pytest.raises(FileNotFoundError):
+        validate_reference_tables(min_wage_path=non_existent, events_path=valid_file)
+
+
+def test_validate_reference_tables_invalid_date(tmp_path):
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = "sector,effective_date,amount_egp,confidence\ngov,invalid-date,2000,high\n"
+    mw_file.write_text(mw_data, encoding="utf-8")
+    events_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="invalid date values"):
+        validate_reference_tables(min_wage_path=mw_file, events_path=events_file)
+
+
+def test_validate_reference_tables_zero_amount(tmp_path):
+    """اختبار رفع ValueError عندما يكون مبلغ الأجر يساوي صفرًا أو قيمة غير موجبة."""
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = "sector,effective_date,amount_egp,confidence\ngov,2020-01-01,0,high\n"
+    mw_file.write_text(mw_data, encoding="utf-8")
+    events_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="non-positive values"):
+        validate_reference_tables(min_wage_path=mw_file, events_path=events_file)
+
+
+def test_validate_reference_tables_invalid_confidence(tmp_path):
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = "sector,effective_date,amount_egp,confidence\ngov,2020-01-01,2000,unknown_conf\n"
+    mw_file.write_text(mw_data, encoding="utf-8")
+    events_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Invalid confidence values"):
+        validate_reference_tables(min_wage_path=mw_file, events_path=events_file)
+
+
+def test_validate_reference_tables_duplicate_effective_date(tmp_path):
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = (
+        "sector,effective_date,amount_egp,confidence\n"
+        "gov,2020-01-01,2000,high\n"
+        "gov,2020-01-01,2500,high\n"
+    )
+    mw_file.write_text(mw_data, encoding="utf-8")
+    events_file.write_text(VALID_EVENTS_CSV, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Duplicate effective dates found"):
+        validate_reference_tables(min_wage_path=mw_file, events_path=events_file)
+
+
+def test_validate_reference_tables_event_out_of_bounds(tmp_path):
+    mw_file = tmp_path / "min_wage.csv"
+    events_file = tmp_path / "events.csv"
+
+    mw_data = "sector,effective_date,amount_egp,confidence\ngov,2020-01-01,2000,high\n"
+    mw_file.write_text(mw_data, encoding="utf-8")
+
+    events_data = (
+        "event_id,event_date,month,type,description,fx_before_egp_per_usd,fx_after_egp_per_usd,"
+        "policy_rate_change_bp,source_1,source_2,confidence,note\n"
+        "E01,1990-01-01,1990-01,rate,test,30,30,100,src1,,high,test\n"
+    )
+    events_file.write_text(events_data, encoding="utf-8")
+
+    with pytest.raises(ValueError, match="Events found outside the allowed period"):
+        validate_reference_tables(min_wage_path=mw_file, events_path=events_file)

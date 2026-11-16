@@ -1,4 +1,8 @@
+from pathlib import Path
+
 import pandas as pd
+
+from purchasing_power.config import END, START
 
 
 def check_missing_or_duplicate_months(df, month_col="month", start=None, end=None):
@@ -89,3 +93,125 @@ def validate_dataset(df, month_col="month", value_cols=None, start=None, end=Non
         check_positive_values(df, col)
 
     return True
+
+
+
+
+
+def validate_reference_tables(
+    min_wage_path: Path = Path("data/reference/min_wage.csv"),
+    events_path: Path = Path("data/reference/events.csv")
+) -> bool:
+    
+    # Check files and its content
+    if not min_wage_path.exists():
+        raise FileNotFoundError(f"min_wage file not found at: {min_wage_path}")
+    if not events_path.exists():
+        raise FileNotFoundError(f"events file not found at: {events_path}")
+
+    df_mw = pd.read_csv(min_wage_path)
+    df_events = pd.read_csv(events_path)
+
+    if df_mw.empty:
+        raise ValueError("min_wage table is empty.")
+    if df_events.empty:
+        raise ValueError("events table is empty.")
+
+    # Check requaired columns existance
+    required_mw_cols = ["sector", "effective_date", "amount_egp", "confidence"]
+    for col in required_mw_cols:
+        if col not in df_mw.columns:
+            raise KeyError(f"Missing required column '{col}' in min_wage.csv")
+
+    required_event_cols = [
+        "event_id", "event_date", "month", "type", "description",
+        "fx_before_egp_per_usd", "fx_after_egp_per_usd",
+        "policy_rate_change_bp", "source_1", "source_2", "confidence", "note"
+    ]
+    for col in required_event_cols:
+        if col not in df_events.columns:
+            raise KeyError(f"Missing required column '{col}' in events.csv")
+
+    # Check invalid values in sector
+    if df_mw["sector"].isna().any():
+        raise ValueError("Found missing (NaN) values in min_wage 'sector'.")
+    if df_mw["sector"].astype(str).str.strip().eq("").any():
+        raise ValueError("Found empty or whitespace values in min_wage 'sector'.")
+
+    # Checking acceptability of transforming dates
+    df_mw["parsed_effective_date"] = pd.to_datetime(df_mw["effective_date"], errors="coerce")
+    if df_mw["parsed_effective_date"].isna().any():
+        raise ValueError("Found missing, empty, or invalid date values (NaT) in min_wage 'effective_date'.")
+
+    df_events["parsed_event_date"] = pd.to_datetime(df_events["event_date"], errors="coerce")
+    if df_events["parsed_event_date"].isna().any():
+        raise ValueError("Found missing, empty, or invalid date values (NaT) in events 'event_date'.")
+
+    # Check for invalid or NaN values in "amount_egp" column
+    converted_amount = pd.to_numeric(df_mw["amount_egp"], errors="coerce")
+    if converted_amount.isna().any():
+        bad_indices = df_mw[converted_amount.isna()].index.tolist()
+        raise ValueError(f"Found missing, non-numeric, or invalid values in min_wage 'amount_egp' at indices: {bad_indices}")
+    
+    df_mw["amount_egp"] = converted_amount
+
+    invalid_amounts = df_mw[df_mw["amount_egp"] <= 0]
+    if not invalid_amounts.empty:
+        details = {idx: val for idx, val in invalid_amounts["amount_egp"].items()}
+        raise ValueError(f"Found non-positive values (<= 0) in min_wage 'amount_egp' at indices: {details}")
+
+    # Checking confidance
+    valid_confidences = {"high", "medium", "low"}
+    if df_mw["confidence"].isna().any():
+        raise ValueError("Found missing (NaN) values in min_wage 'confidence'.")
+    
+    invalid_conf = df_mw[~df_mw["confidence"].isin(valid_confidences)]
+    if not invalid_conf.empty:
+        unique_bad = invalid_conf["confidence"].unique()
+        raise ValueError(f"Invalid confidence values in min_wage: {unique_bad}. Must be one of {valid_confidences}")
+
+    if df_events["confidence"].isna().any():
+        raise ValueError("Found missing (NaN) values in events 'confidence'.")
+    
+    invalid_event_conf = df_events[~df_events["confidence"].isin(valid_confidences)]
+    if not invalid_event_conf.empty:
+        unique_bad_event = invalid_event_conf["confidence"].unique()
+        raise ValueError(f"Invalid confidence values in events: {unique_bad_event}. Must be one of {valid_confidences}")
+
+    # Check duplicates in sector date
+    if df_mw.duplicated(subset=["sector", "parsed_effective_date"]).any():
+        duplicates = df_mw[df_mw.duplicated(subset=["sector", "parsed_effective_date"], keep=False)]
+        dup_details = duplicates[["sector", "effective_date"]].to_dict(orient="records")
+        raise ValueError(f"Duplicate effective dates found within the same sector: {dup_details}")
+
+    # Checking chronological order and non reduction of wages in sectors
+    for sector, group in df_mw.groupby("sector"):
+        if not group["parsed_effective_date"].is_monotonic_increasing:
+            raise ValueError(f"Effective dates for sector '{sector}' are not sorted in chronological order in the raw data.")
+
+    df_mw_sorted = df_mw.sort_values(by=["sector", "parsed_effective_date"])
+    for sector, group in df_mw_sorted.groupby("sector"):
+        if not group["amount_egp"].is_monotonic_increasing:
+            raise ValueError(f"Wage amounts for sector '{sector}' decrease over time (violation of non-decreasing rule).")
+
+    # Checking START and END
+    start_period = pd.Period(START, freq="M")
+    end_period = pd.Period(END, freq="M")
+
+    df_events["event_period"] = df_events["parsed_event_date"].dt.to_period("M")
+    outside_events = df_events[
+        (df_events["event_period"] < start_period) | (df_events["event_period"] > end_period)
+    ]
+
+    if not outside_events.empty:
+        bad_dates = outside_events["event_date"].tolist()
+        raise ValueError(f"Events found outside the allowed period [{START} to {END}]: {bad_dates}")
+
+    print("Reference tables validation PASSED successfully!")
+    return True
+
+
+
+
+
+

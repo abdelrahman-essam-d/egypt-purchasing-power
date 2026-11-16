@@ -1,9 +1,9 @@
 import os
 
 import pandas as pd
-from purchasing_power.config import END, START
 
-from purchasing_power.validate import validate_dataset
+from purchasing_power.config import END, START
+from purchasing_power.validate import validate_dataset, validate_reference_tables
 
 datasets_config = {
     "cpi_egypt_monthly.csv": {"month_col": "month", "value_cols": ["cpi_index"]},
@@ -41,3 +41,12 @@ for filename, config in datasets_config.items():
         print(f"FAILED\n  Reason: {e}\n")
 
 print("\n Validation process completed.")
+
+
+
+
+
+
+
+if __name__ == "__main__":
+    validate_reference_tables()
