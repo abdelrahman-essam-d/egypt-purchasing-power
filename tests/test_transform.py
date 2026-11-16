@@ -1,7 +1,11 @@
 import pandas as pd
 import pytest
 
-from purchasing_power.transform import standardize_month_col, to_monthly_last_observation
+from purchasing_power.transform import (
+    build_monthly_min_wage,
+    standardize_month_col,
+    to_monthly_last_observation,
+)
 
 
 def test_to_monthly_last_observation():
@@ -82,3 +86,33 @@ def test_standardize_month_col_values():
     assert str(result_df.loc[0, "month"]) == "2026-01"
     assert str(result_df.loc[1, "month"]) == "2026-01"
     assert str(result_df.loc[2, "month"]) == "2026-02"
+
+
+
+
+def test_build_monthly_min_wage(tmp_path):
+
+    # 1. Create a small sample dataset
+    data = {
+        "sector": ["government", "government"],
+        "amount_egp": [3000, 4000],
+        "effective_date": ["2024-01-01", "2024-04-01"]
+    }
+
+    df = pd.DataFrame(data)
+
+    file_path = tmp_path / "min_wage.csv"
+    df.to_csv(file_path, index=False)
+
+    # 2. Run the function
+    result = build_monthly_min_wage(
+        file_path=file_path,
+        start="2024-01",
+        end="2024-06"
+    )
+
+    # 3. Expected result
+    expected = [3000, 3000, 3000, 4000, 4000, 4000]
+
+    assert result["government"].tolist() == expected
+    assert len(result) == 6
