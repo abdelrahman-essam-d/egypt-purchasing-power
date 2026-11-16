@@ -74,3 +74,99 @@ def build_monthly_min_wage(
         df_monthly[sector] = monthly_wages
 
     return df_monthly
+
+
+
+
+
+def merge_wage_economic_data(
+    wage_path=Path("data/processed/min_wage_monthly.csv"),
+    economic_path=Path("data/processed/economic_indicators_monthly.csv")
+):
+    """
+    Merge monthly minimum wages with economic indicators.
+    """
+
+    # 1. Load datasets
+    df_wage = pd.read_csv(wage_path)
+    df_economic = pd.read_csv(economic_path)
+
+    # 2. Standardize month columns
+    df_wage = standardize_month_col(df_wage)
+    df_economic = standardize_month_col(df_economic)
+
+    # 3. Merge datasets
+    df = pd.merge(
+        df_wage,
+        df_economic,
+        on="month",
+        how="inner"
+    )
+
+    # 4. Sort chronologically
+    df = df.sort_values("month").reset_index(drop=True)
+
+    return df
+
+
+
+def calculate_real_wage(
+    df,
+    wage_col,
+    cpi_col="cpi_index",
+    base_month=START
+):
+    """
+    Calculate real minimum wage using CPI,
+    expressed in purchasing power of the base month.
+    """
+
+    df = df.copy()
+
+    base_period = pd.Period(base_month, freq="M")
+
+    base_cpi = df.loc[
+        df["month"] == base_period, cpi_col
+    ]
+
+    if base_cpi.empty:
+        raise ValueError(f"Base month {base_month} not found.")
+
+    base_cpi = base_cpi.iloc[0]
+
+    if pd.isna(base_cpi) or base_cpi <= 0:
+        raise ValueError("Base CPI must be positive and non-missing.")
+
+    df[f"{wage_col}_real"] = (
+        df[wage_col] * base_cpi / df[cpi_col]
+    )
+
+    return df
+
+
+
+def calculate_real_wage_usd(
+    df,
+    real_wage_col,
+    fx_col="egp_per_usd"
+):
+    """
+    Convert real EGP wage into USD using official exchange rate.
+    """
+
+    df = df.copy()
+
+    if (df[fx_col].dropna() <= 0).any():
+        raise ValueError("Exchange rates must be positive.")
+
+    df[f"{real_wage_col}_usd"] = (
+        df[real_wage_col] / df[fx_col]
+    )
+
+    return df
+
+
+
+
+
+
