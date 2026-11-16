@@ -298,3 +298,67 @@ def compare_2017_wage_sensitivity(
         })
 
     return pd.DataFrame(results)
+
+
+
+
+
+def calculate_implied_fx(
+    df,
+    local_gold_col="gold24_egp_per_gram",
+    global_gold_col="gold_usd_per_oz",
+    official_fx_col="egp_per_usd",
+):
+    """
+    Calculate implied EGP/USD exchange rate from
+    local and global 24k gold prices.
+    """
+
+    df = df.copy()
+
+    required_cols = [
+        local_gold_col,
+        global_gold_col,
+        official_fx_col,
+    ]
+
+    missing_cols = [
+        col for col in required_cols
+        if col not in df.columns
+    ]
+
+    if missing_cols:
+        raise ValueError(
+            f"Missing required columns: {missing_cols}"
+        )
+
+    # Validate positive prices and exchange rates
+    for col in required_cols:
+        invalid = df[col].notna() & (df[col] <= 0)
+
+        if invalid.any():
+            raise ValueError(
+                f"{col} must contain positive values."
+            )
+
+    # Convert global gold price from ounce to gram
+    df["gold_usd_per_gram"] = (
+        df[global_gold_col] / 31.1035
+    )
+
+    # Calculate implied exchange rate
+    df["implied_egp_per_usd"] = (
+        df[local_gold_col] / df["gold_usd_per_gram"]
+    )
+
+    # Calculate percentage gap
+    df["implied_fx_gap_pct"] = (
+        (
+            df["implied_egp_per_usd"]
+            - df[official_fx_col]
+        )
+        / df[official_fx_col]
+        * 100
+    )
+
+    return df

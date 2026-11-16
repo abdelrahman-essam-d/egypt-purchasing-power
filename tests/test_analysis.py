@@ -79,3 +79,33 @@ def test_recovery_in_event_month(tmp_path):
     assert government["status"] == "recovered"
     assert government["recovery_month"] == "2020-02"
     assert government["months_to_recover"] == 1
+
+
+
+from purchasing_power.analysis import calculate_implied_fx
+
+
+def test_calculate_implied_fx():
+
+    df = pd.DataFrame({
+        "gold24_egp_per_gram": [1000],
+        "gold_usd_per_oz": [1000],
+        "egp_per_usd": [50],
+    })
+
+    result = calculate_implied_fx(df)
+
+    expected_implied_fx = 31.1035
+    expected_gap = (
+        (expected_implied_fx - 50) / 50
+    ) * 100
+
+    assert abs(
+        result.loc[0, "implied_egp_per_usd"]
+        - expected_implied_fx
+    ) < 1e-6
+
+    assert abs(
+        result.loc[0, "implied_fx_gap_pct"]
+        - expected_gap
+    ) < 1e-6
